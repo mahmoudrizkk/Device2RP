@@ -52,8 +52,8 @@ weight_value = "0"
 # Today's slaughter count ID (fetched at startup)
 count_id_today = None
 # Placeholder for the API endpoint that returns today's countID
-API_URL_TODAY_COUNT = "http://shatat-ue.runasp.net/api/Devices/GetTodayLastCountId"  # Set your GET endpoint here when available
-# API_URL_TODAY_COUNT = "http://elmagzer.runasp.net/api/Devices/GetTodayLastCountId"  # Set your GET endpoint here when available
+# API_URL_TODAY_COUNT = "http://shatat-ue.runasp.net/api/Devices/GetTodayLastCountId"  # Set your GET endpoint here when available
+API_URL_TODAY_COUNT = "http://elmagzer.runasp.net/api/Devices/GetTodayLastCountId"  # Set your GET endpoint here when available
 
 def get_count_id_for_request():
     """Return a safe integer countID for outgoing requests."""
@@ -1073,8 +1073,8 @@ def select_store(store_number):
     type_value = type_mapping.get(selected_type, "1")
 
     # Get a fresh weight from serial before sending to API
-    fresh_weight = read_weight_from_serial()
-    # fresh_weight = 100
+    # fresh_weight = read_weight_from_serial()
+    fresh_weight = 100
     print(fresh_weight)
     if fresh_weight:
         weight_to_send = str(fresh_weight)
@@ -1085,8 +1085,8 @@ def select_store(store_number):
     # Build API with countID and retry logic on count mismatch
     def build_api_url(with_count_id):
         return (
-            f"http://shatat-ue.runasp.net/api/Devices/ScanForDevice2?"
-            # f"http://elmagzer.runasp.net/api/Devices/ScanForDevice2?"
+            # f"http://shatat-ue.runasp.net/api/Devices/ScanForDevice2?"
+            f"http://elmagzer.runasp.net/api/Devices/ScanForDevice2?"
             f"weight={weight_to_send}&TypeOfCow={type_value}&TechId=2335C4B&MachId=1&storeId={store_number}&Countid={with_count_id}"
         )
 
@@ -1166,14 +1166,14 @@ def select_store(store_number):
                     except Exception:
                         pass
                 retry_count += 1
-                time.sleep(5)  # Short delay before retry
+                time.sleep(1)  # Short delay before retry
                 continue
             elif api_response.get("statusCode") == 404 and api_response.get("message") == "Resource was not found":
                 break
             else:
                 print(f"Attempt {retry_count + 1} failed: {api_response.get('message', 'Unknown error')}")
                 retry_count += 1
-                time.sleep(2)  # Wait 2 seconds before retrying
+                time.sleep(5)  # Wait 2 seconds before retrying
                 continue
     finally:
         # Always close the loading popup
@@ -1328,7 +1328,7 @@ def select_store(store_number):
 
         print_cmd = b"\r\nPRINT 2\r\n"
         full_command = command + print_cmd
-        send_tspl_command(printer, full_command)
+        # send_tspl_command(printer, full_command)
 
     # Example parts list
     meat_parts = [
@@ -1364,14 +1364,14 @@ def select_store(store_number):
        
         send_multi_bmp_to_printer(printer, bmp_jobs, extra_text)
 
-    printer = usb.core.find(idVendor=0x2D37, idProduct=0xDEF4)
-    if printer:
-        index = int(extracted_number)
-        print_part_by_index(printer, index)
-        printer.reset()  # Attempt a soft reset to clear any potential issues
+    # printer = usb.core.find(idVendor=0x2D37, idProduct=0xDEF4)
+    # if printer:
+    #     index = int(extracted_number)
+    #     print_part_by_index(printer, index)
+    #     printer.reset()  # Attempt a soft reset to clear any potential issues
 
-    else:
-        print("Printer not found.")
+    # else:
+    #     print("Printer not found.")
 
     # Display confirmation message
     for widget in app.winfo_children():
