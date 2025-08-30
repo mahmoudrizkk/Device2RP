@@ -1087,8 +1087,8 @@ def select_store(store_number):
     # Build API with countID and retry logic on count mismatch
     def build_api_url(with_count_id):
         return (
-            # f"http://shatat-ue.runasp.net/api/Devices/ScanForDevice2?"
-            f"http://elmagzer.runasp.net/api/Devices/ScanForDevice2?"
+            f"http://shatat-ue.runasp.net/api/Devices/ScanForDevice2?"
+            # f"http://elmagzer.runasp.net/api/Devices/ScanForDevice2?"
             f"weight={weight_to_send}&TypeOfCow={type_value}&TechId=2335C4B&MachId=1&storeId={store_number}&Countid={with_count_id}"
         )
 
