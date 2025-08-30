@@ -1,3 +1,22 @@
+"""
+Device2RP Application - Enhanced with Robust Error Handling and Timeout Protection
+
+This application has been improved to prevent device hanging and provide better error recovery:
+- Maximum retry limits (5 attempts) for API calls
+- Total operation timeout (2 minutes) to prevent infinite loops
+- Network connectivity checks before API calls
+- Proper serial communication timeouts
+- Graceful error handling with user-friendly messages
+- Automatic fallback mechanisms for malformed responses
+
+Key improvements:
+1. API retry logic with exponential backoff
+2. Serial communication timeouts (10-30 seconds)
+3. Network connectivity validation
+4. Comprehensive error categorization and handling
+5. Safe resource cleanup and popup management
+"""
+
 import customtkinter as ctk  # Import the CustomTkinter module for modern UI styling
 from customtkinter import CTkImage  
 from tkinter import messagebox  # Import messagebox for displaying alerts
@@ -52,8 +71,8 @@ weight_value = "0"
 # Today's slaughter count ID (fetched at startup)
 count_id_today = None
 # Placeholder for the API endpoint that returns today's countID
-# API_URL_TODAY_COUNT = "http://shatat-ue.runasp.net/api/Devices/GetTodayLastCountId"  # Set your GET endpoint here when available
-API_URL_TODAY_COUNT = "http://elmagzer.runasp.net/api/Devices/GetTodayLastCountId"  # Set your GET endpoint here when available
+API_URL_TODAY_COUNT = "http://shatat-ue.runasp.net/api/Devices/GetTodayLastCountId"  # Set your GET endpoint here when available
+# API_URL_TODAY_COUNT = "http://elmagzer.runasp.net/api/Devices/GetTodayLastCountId"  # Set your GET endpoint here when available
 
 def get_count_id_for_request():
     """Return a safe integer countID for outgoing requests."""
@@ -172,16 +191,30 @@ def read_until_equal():
         raise RuntimeError("Serial connection is not initialized or not open.")
     
     buffer = ""  # Initialize an empty buffer to store received data
+    start_time = time.time()
+    max_wait_time = 30  # Maximum 30 seconds to wait for '=' character
+    
     try:
-        while True:
+        while time.time() - start_time < max_wait_time:
             if ser.in_waiting > 0:  # Check if there is data available in the buffer
                 char = ser.read().decode('utf-8')  # Read one character and decode it
                 buffer += char  # Append the character to the buffer
 
                 if char == "=":  # Stop reading when '=' is encountered
+                    ser.close()
                     return buffer.strip()  # Return the received string after stripping any extra spaces
+            
+            time.sleep(0.1)  # Small delay to prevent CPU spinning
+            
+        print("Serial read timeout - '=' character not found within 30 seconds")
+        ser.close()
+        return None
     except Exception as e:
         print(f"Error while reading from UART: {e}")
+        try:
+            ser.close()
+        except:
+            pass
         return None  # Return None in case of an error
 
 # Function to read weight from external device
@@ -768,7 +801,11 @@ data_Mapping = [
 def read_weight_from_serial(com_port='/dev/serial0', baud_rate=9600):
     try:
         ser = serial.Serial(com_port, baud_rate, timeout=1)
-        while True:
+        # Add timeout to prevent infinite hanging
+        start_time = time.time()
+        max_wait_time = 10  # Maximum 10 seconds to wait for data
+        
+        while time.time() - start_time < max_wait_time:
             if ser.in_waiting >= 18:
                 frame = ser.read(18)
                 frame_data_original = [byte for byte in frame]
@@ -781,13 +818,24 @@ def read_weight_from_serial(com_port='/dev/serial0', baud_rate=9600):
                     print(mapped_frame_data)
                     try:
                         current_weight = float(weight_str)
+                        ser.close()
                         return str(current_weight)
                     except Exception as e:
                         print(f"Weight parse error: {e}")
+                        ser.close()
                         return None
+            time.sleep(0.1)  # Small delay to prevent CPU spinning
+            
+        print("Serial read timeout - no data received within 10 seconds")
+        ser.close()
+        return None
     except Exception as e:
         print(f"Serial error: {e}")
-    return None
+        try:
+            ser.close()
+        except:
+            pass
+        return None
 
 # Function to display a custom error page with refresh and back buttons
 def display_error_message(message="Failed to connect to the server", refresh_callback=None):
@@ -816,6 +864,37 @@ def display_error_message(message="Failed to connect to the server", refresh_cal
         width=600,
         height=120
     ).pack(pady=30)
+
+# Function to check network connectivity
+def check_network_connectivity():
+    """
+    Check if the device can reach the internet and the API server.
+    Returns True if network is available, False otherwise.
+    """
+    try:
+        # Try to connect to a reliable external service
+        response = requests.get("http://8.8.8.8", timeout=5)
+        return True
+    except:
+        try:
+            # Fallback to DNS check
+            response = requests.get("http://google.com", timeout=5)
+            return True
+        except:
+            return False
+
+# Function to handle network errors gracefully
+def handle_network_error(store_number, selected_type):
+    """
+    Display a user-friendly error message for network issues with options to retry or go back.
+    """
+    error_message = "Network connection failed. Please check your internet connection and try again."
+    
+    def retry_operation():
+        # Clear the error page and retry the store selection
+        show_page(lambda: select_store(store_number))
+    
+    display_error_message(error_message, retry_operation)
 
 # import customtkinter as ctk
 # import threading
@@ -1081,12 +1160,17 @@ def select_store(store_number):
     else:
         weight_to_send = str(weight_value)  # fallback to last known value
 
+    # Check network connectivity before proceeding
+    if not check_network_connectivity():
+        handle_network_error(store_number, selected_type)
+        return
+
     # Prepare API parameters
     # Build API with countID and retry logic on count mismatch
     def build_api_url(with_count_id):
         return (
-            # f"http://shatat-ue.runasp.net/api/Devices/ScanForDevice2?"
-            f"http://elmagzer.runasp.net/api/Devices/ScanForDevice2?"
+            f"http://shatat-ue.runasp.net/api/Devices/ScanForDevice2?"
+            # f"http://elmagzer.runasp.net/api/Devices/ScanForDevice2?"
             f"weight={weight_to_send}&TypeOfCow={type_value}&TechId=2335C4B&MachId=1&storeId={store_number}&Countid={with_count_id}"
         )
 
@@ -1103,14 +1187,23 @@ def select_store(store_number):
                     "message": response.text
                 }
             return response, payload
+        except requests.exceptions.Timeout:
+            print("API request timed out after 15 seconds")
+            return None, {"statusCode": 408, "message": "Request timeout"}
+        except requests.exceptions.ConnectionError:
+            print("Connection error - server may be unreachable")
+            return None, {"statusCode": 503, "message": "Connection failed"}
         except Exception as e:
             print(f"API connection error: {e}")
-            return None, None
+            return None, {"statusCode": 500, "message": f"Request failed: {str(e)}"}
 
-    # Retry logic - keep trying until we get 200 OK (infinite attempts)
+    # Retry logic with proper limits and timeout
+    MAX_RETRIES = 5
+    MAX_TOTAL_TIME = 120  # 2 minutes total timeout
     retry_count = 0
     api_response = None
     response = None
+    start_time = time.time()
     
     # Create and show loading popup
     loading_popup = ctk.CTkToplevel(app)
@@ -1133,18 +1226,25 @@ def select_store(store_number):
     loading_popup.update()
     
     try:
-        while True:  # Infinite loop - keep trying until success
+        while retry_count < MAX_RETRIES:
+            # Check total time limit
+            if time.time() - start_time > MAX_TOTAL_TIME:
+                print("Total operation time exceeded 2 minutes")
+                api_response = {"statusCode": 408, "message": "Operation timeout - exceeded 2 minutes"}
+                break
+                
             current_count = get_count_id_for_request()
             api_url = build_api_url(current_count)
             
-            print(f"Attempt {retry_count + 1}: Trying API call...")
+            print(f"Attempt {retry_count + 1}/{MAX_RETRIES}: Trying API call...")
             
             response, api_response = do_request(api_url)
             
             if response is None:
                 print(f"Attempt {retry_count + 1} failed: No response")
                 retry_count += 1
-                time.sleep(2)  # Wait 2 seconds before retrying
+                if retry_count < MAX_RETRIES:
+                    time.sleep(2)  # Wait 2 seconds before retrying
                 continue
                 
             # Check if we got 200 OK
@@ -1166,18 +1266,48 @@ def select_store(store_number):
                     except Exception:
                         pass
                 retry_count += 1
-                time.sleep(1)  # Short delay before retry
+                if retry_count < MAX_RETRIES:
+                    time.sleep(5)  # Short delay before retry
                 continue
             elif api_response.get("statusCode") == 404 and api_response.get("message") == "Resource was not found":
+                print("Resource not found - stopping retries")
                 break
+            elif api_response.get("statusCode") in [500, 502, 503, 504]:
+                # Server errors - retry with exponential backoff
+                retry_count += 1
+                if retry_count < MAX_RETRIES:
+                    backoff_time = min(2 ** retry_count, 10)  # Exponential backoff, max 10 seconds
+                    print(f"Server error, retrying in {backoff_time} seconds...")
+                    time.sleep(backoff_time)
+                continue
             else:
                 print(f"Attempt {retry_count + 1} failed: {api_response.get('message', 'Unknown error')}")
                 retry_count += 1
-                time.sleep(5)  # Wait 2 seconds before retrying
+                if retry_count < MAX_RETRIES:
+                    time.sleep(2)  # Wait 2 seconds before retrying
                 continue
+        
+        # Check if we exceeded retry limit
+        if retry_count >= MAX_RETRIES:
+            print(f"Maximum retries ({MAX_RETRIES}) exceeded")
+            if not api_response:
+                api_response = {"statusCode": 429, "message": f"Maximum retries ({MAX_RETRIES}) exceeded"}
+            else:
+                api_response["message"] = f"Max retries exceeded: {api_response.get('message', 'Unknown error')}"
+    
+        # Ensure we have a valid response object
+        if not api_response:
+            api_response = {"statusCode": 500, "message": "No response received from server"}
+                
+    except Exception as e:
+        print(f"Unexpected error during API calls: {e}")
+        api_response = {"statusCode": 500, "message": f"Unexpected error: {str(e)}"}
     finally:
         # Always close the loading popup
-        loading_popup.destroy()
+        try:
+            loading_popup.destroy()
+        except:
+            pass
 
     # Create data that would be sent to API (for display)
     data_to_send = {
@@ -1195,46 +1325,58 @@ def select_store(store_number):
 
     # Process API response message
     extracted_number = None
+    message_list = []
+    
     if "statusCode" in api_response and api_response["statusCode"] == 200:
         raw_message = api_response.get("message", "")
-
-        if raw_message.startswith("OK1 "):
-            raw_message = raw_message[4:]  # remove "OK1 "
-
-        message_list = raw_message.split(",")
-        print("Raw split message list:", message_list)
-
-        # Remove 'Z' from the first element
-        if len(message_list) > 0 and message_list[0].startswith("Z"):
-            message_list[0] = message_list[0][1:]
-
-        # Remove 'L' from the last element (the date)
-        if len(message_list) > 0 and message_list[-1].endswith("L"):
-            message_list[-1] = message_list[-1][:-1]
-
-        # Extract number only from Arabic part if exists
-        if len(message_list) > 6:
-            arabic_text = message_list[6]
-            match = re.search(r'\d+', arabic_text)
-            if match:
-                extracted_number = match.group(0)
-                message_list[6] = extracted_number
-
-        print("Processed message list:")
-        print(message_list)
-
-        if extracted_number:
-            print("Extracted number from Arabic text:", extracted_number)
         
-        # On success, increment local countID for next request
-        try:
-            # global count_id_today
-            if count_id_today is None:
-                count_id_today = 0
-            count_id_today = int(count_id_today) + 1
-            print(f"Local countID incremented to: {count_id_today}")
-        except Exception as _:
-            pass
+        if not raw_message:
+            print("API returned success but no message data")
+            api_response["message"] = "Success but no data received"
+            extracted_number = "1"  # Default fallback
+            message_list = ["1", "", "", "", "", "", "1", "", ""]  # Default message list
+        else:
+            if raw_message.startswith("OK1 "):
+                raw_message = raw_message[4:]  # remove "OK1 "
+
+            message_list = raw_message.split(",")
+            print("Raw split message list:", message_list)
+
+            # Remove 'Z' from the first element
+            if len(message_list) > 0 and message_list[0].startswith("Z"):
+                message_list[0] = message_list[0][1:]
+
+            # Remove 'L' from the last element (the date)
+            if len(message_list) > 0 and message_list[-1].endswith("L"):
+                message_list[-1] = message_list[-1][:-1]
+
+            # Extract number only from Arabic part if exists
+            if len(message_list) > 6:
+                arabic_text = message_list[6]
+                match = re.search(r'\d+', arabic_text)
+                if match:
+                    extracted_number = match.group(0)
+                    message_list[6] = extracted_number
+                else:
+                    extracted_number = "1"  # Default fallback
+            else:
+                extracted_number = "1"  # Default fallback
+
+            print("Processed message list:")
+            print(message_list)
+
+            if extracted_number:
+                print("Extracted number from Arabic text:", extracted_number)
+            
+            # On success, increment local countID for next request
+            try:
+                # global count_id_today
+                if count_id_today is None:
+                    count_id_today = 0
+                count_id_today = int(count_id_today) + 1
+                print(f"Local countID incremented to: {count_id_today}")
+            except Exception as _:
+                pass
     # elif api_response.get("statusCode") == 400:
     #     print("CountID is ahead of server")
     #     count_id_today = int(api_response.get("lastCountId", "")) + 1
@@ -1328,7 +1470,7 @@ def select_store(store_number):
 
         print_cmd = b"\r\nPRINT 2\r\n"
         full_command = command + print_cmd
-        # send_tspl_command(printer, full_command)
+        send_tspl_command(printer, full_command)
 
     # Example parts list
     meat_parts = [
@@ -1362,14 +1504,23 @@ def select_store(store_number):
             f'TEXT 280,280,"2",0,1,1,"{message_list[0]}"\r\n'
              )       
        
-        send_multi_bmp_to_printer(printer, bmp_jobs, extra_text)
+        # send_multi_bmp_to_printer(printer, bmp_jobs, extra_text)
 
     # printer = usb.core.find(idVendor=0x2D37, idProduct=0xDEF4)
     # if printer:
-    #     index = int(extracted_number)
-    #     print_part_by_index(printer, index)
-    #     printer.reset()  # Attempt a soft reset to clear any potential issues
-
+    #     try:
+    #         # Ensure extracted_number is valid before converting to int
+    #         if extracted_number and extracted_number.isdigit():
+    #             index = int(extracted_number)
+    #             if 1 <= index <= 4:  # Valid range for meat parts
+    #                 print_part_by_index(printer, index)
+    #                 printer.reset()  # Attempt a soft reset to clear any potential issues
+    #             else:
+    #                 print(f"Invalid body part index: {index}. Must be between 1-4")
+    #         else:
+    #             print(f"Invalid extracted_number: {extracted_number}")
+    #     except (ValueError, TypeError) as e:
+    #         print(f"Error processing extracted_number '{extracted_number}': {e}")
     # else:
     #     print("Printer not found.")
 
@@ -1391,12 +1542,15 @@ def select_store(store_number):
     text_label = ctk.CTkLabel(frame, text=f"Type: {selected_type} (Value: {type_value})\nSelected Store: {store_number}", font=("Arial", 40))
     text_label.grid(row=0, column=0, padx=30)
     
-    if response.status_code == 200:
+    # Check API response status and handle errors gracefully
+    if api_response and api_response.get("statusCode") == 200:
         response_text = "Data sent to API!"
         response_color = custom_color
+        can_print = True
     else:
         response_text = "Failed to send data!"
         response_color = "red"
+        can_print = False
 
     # Add success message
     ctk.CTkLabel(
@@ -1450,16 +1604,18 @@ def select_store(store_number):
         fg_color=button_color
     ).pack(pady=25)
     
-    ctk.CTkButton(
-        app,
-        text="Reprint",
-        command= reprint,
-        font=("Arial", 45, "bold"),
-        text_color="black",
-        width=500,
-        height=75,
-        fg_color="red"
-    ).pack(pady=30)
+    # Only show reprint button if API call was successful
+    if can_print:
+        ctk.CTkButton(
+            app,
+            text="Reprint",
+            command=reprint,
+            font=("Arial", 45, "bold"),
+            text_color="black",
+            width=500,
+            height=75,
+            fg_color="red"
+        ).pack(pady=30)
     
     # Button to logout
     ctk.CTkButton(
