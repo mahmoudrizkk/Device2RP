@@ -1002,11 +1002,11 @@ def reprint():
         if extra_text:
             command_prefix += extra_text
 
-        command = command_prefix.encode('ascii')
+        command = command_prefix.encode('utf-8')
 
         for bmp_path, (x, y) in bmp_paths_and_coords:
             width_bytes, height, data = load_and_prepare_image(bmp_path)
-            bmp_cmd = f"BITMAP {x},{y},{width_bytes},{height},0,".encode('ascii')
+            bmp_cmd = f"BITMAP {x},{y},{width_bytes},{height},0,".encode('utf-8')
             command += bmp_cmd + data
 
         print_cmd = b"\r\nPRINT 2\r\n"
@@ -1040,9 +1040,11 @@ def reprint():
             f'TEXT 0,90,"2",0,1,1,"batch number:{batch_number}"\r\n'
             f'TEXT 0,120,"2",0,1,1,"Date: {date_info}"\r\n'
             f'TEXT 0,150,"2",0,1,1,"weight:{weight}"\r\n'
+            f'TEXT 0,180,"2",0,1,1,"type:{user_actions[-1]["selected_option"]}"\r\n'
             f'TEXT 30,220,"2",0,1,1,"{body_part}"\r\n'
             f'QRCODE 260,120,L,7,A,0,"{QR_id}"\r\n'
             f'TEXT 280,280,"2",0,1,1,"{QR_id}"\r\n'
+            
              )       
        
         send_multi_bmp_to_printer(printer, bmp_jobs, extra_text)
@@ -1075,8 +1077,8 @@ def select_store(store_number):
     type_value = type_mapping.get(selected_type, "1")
 
     # Get a fresh weight from serial before sending to API
-    # fresh_weight = read_weight_from_serial()
-    fresh_weight = 100
+    fresh_weight = read_weight_from_serial()
+    #fresh_weight = 100
     print(fresh_weight)
     if fresh_weight:
         weight_to_send = str(fresh_weight)
@@ -1368,11 +1370,11 @@ def select_store(store_number):
         if extra_text:
             command_prefix += extra_text
 
-        command = command_prefix.encode('ascii')
+        command = command_prefix.encode('utf-8')
 
         for bmp_path, (x, y) in bmp_paths_and_coords:
             width_bytes, height, data = load_and_prepare_image(bmp_path)
-            bmp_cmd = f"BITMAP {x},{y},{width_bytes},{height},0,".encode('ascii')
+            bmp_cmd = f"BITMAP {x},{y},{width_bytes},{height},0,".encode('utf-8')
             command += bmp_cmd + data
 
         print_cmd = b"\r\nPRINT 2\r\n"
@@ -1406,6 +1408,7 @@ def select_store(store_number):
             f'TEXT 0,90,"2",0,1,1,"batch number:{message_list[3]}"\r\n'
             f'TEXT 0,120,"2",0,1,1,"Date: {message_list[8]}"\r\n'
             f'TEXT 0,150,"2",0,1,1,"weight:{message_list[7]}"\r\n'
+            f'TEXT 0,180,"2",0,1,1,"type:{user_actions[-1]["selected_option"]}"\r\n'
             f'TEXT 30,220,"2",0,1,1,"{message_list[6]}"\r\n'
             f'QRCODE 260,120,L,7,A,0,"{message_list[0]}"\r\n'
             f'TEXT 280,280,"2",0,1,1,"{message_list[0]}"\r\n'
@@ -1520,7 +1523,7 @@ def select_store(store_number):
         width=500,
         height=75,
         fg_color="red"
-    ).pack(pady=15)
+    ).pack(pady=20)
 
 # Start the app by fetching today's countID, then showing the password page
 fetch_today_count_id()
