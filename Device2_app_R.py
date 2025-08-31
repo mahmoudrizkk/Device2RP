@@ -1071,7 +1071,7 @@ def reprint():
 def select_store(store_number):
     global selected_type_global
     # Get the selected type from the previous action
-    selected_type = user_actions[-1].get("selected_option", button_names[0])
+    selected_type = user_actions[-1].get("selected_option", selected_type_global)
     
     # Update the global selected type
     selected_type_global = selected_type
