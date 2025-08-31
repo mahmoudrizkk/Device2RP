@@ -43,6 +43,9 @@ current_page = None # Current page
 # Button names for main menu
 button_names = ["Cutting", "Carcas", "Check"]
 
+# Global variable to store the selected type
+selected_type_global = "Unknown"
+
 # Variable to control the running of the number update
 update_running = False 
  
@@ -566,12 +569,16 @@ def main_menu():
 
 # Function to show confirmation page
 def show_confirmation(selected_option):
+    global selected_type_global
     # Clear the window
     for widget in app.winfo_children():
         widget.destroy()
         
     # Store the selected option in user actions
     user_actions.append({"selected_option": selected_option})
+    
+    # Set the global selected type
+    selected_type_global = selected_option
         
     # Create a frame for confirmation
     confirm_frame = ctk.CTkFrame(app)
@@ -1040,7 +1047,7 @@ def reprint():
             f'TEXT 0,90,"2",0,1,1,"batch number:{batch_number}"\r\n'
             f'TEXT 0,120,"2",0,1,1,"Date: {date_info}"\r\n'
             f'TEXT 0,150,"2",0,1,1,"weight:{weight}"\r\n'
-            f'TEXT 0,180,"2",0,1,1,"type:{user_actions[-1].get("selected_option", "Unknown") if user_actions else "Unknown"}"\r\n'
+            f'TEXT 0,180,"2",0,1,1,"type:{selected_type_global}"\r\n'
             f'TEXT 30,220,"2",0,1,1,"{body_part}"\r\n'
             f'QRCODE 260,120,L,7,A,0,"{QR_id}"\r\n'
             f'TEXT 280,280,"2",0,1,1,"{QR_id}"\r\n'
@@ -1062,8 +1069,12 @@ def reprint():
 # ... existing code ...
 
 def select_store(store_number):
+    global selected_type_global
     # Get the selected type from the previous action
     selected_type = user_actions[-1].get("selected_option", button_names[0])
+    
+    # Update the global selected type
+    selected_type_global = selected_type
     
     # Store the selected store number in user actions
     user_actions[-1]["store_number"] = store_number
@@ -1229,7 +1240,7 @@ def select_store(store_number):
 
     # Create data that would be sent to API (for display)
     data_to_send = {
-        "type": selected_type,
+        "type": selected_type_global,
         "type_value": type_value,
         "store": store_number,
         "weight": weight_to_send,
@@ -1408,7 +1419,7 @@ def select_store(store_number):
             f'TEXT 0,90,"2",0,1,1,"batch number:{message_list[3]}"\r\n'
             f'TEXT 0,120,"2",0,1,1,"Date: {message_list[8]}"\r\n'
             f'TEXT 0,150,"2",0,1,1,"weight:{message_list[7]}"\r\n'
-            f'TEXT 0,180,"2",0,1,1,"type:{user_actions[-1].get("selected_option", "Unknown") if user_actions else "Unknown"}"\r\n'
+            f'TEXT 0,180,"2",0,1,1,"type:{selected_type_global}"\r\n'
             f'TEXT 30,220,"2",0,1,1,"{message_list[6]}"\r\n'
             f'QRCODE 260,120,L,7,A,0,"{message_list[0]}"\r\n'
             f'TEXT 280,280,"2",0,1,1,"{message_list[0]}"\r\n'
