@@ -1089,7 +1089,6 @@ def select_store(store_number):
 
     # Get a fresh weight from serial before sending to API
     fresh_weight = read_weight_from_serial()
-    #fresh_weight = 100
     print(fresh_weight)
     if fresh_weight:
         weight_to_send = str(fresh_weight)
@@ -1097,11 +1096,9 @@ def select_store(store_number):
         weight_to_send = str(weight_value)  # fallback to last known value
 
     # Prepare API parameters
-    # Build API with countID and retry logic on count mismatch
     def build_api_url(with_count_id):
         return (
             f"http://shatat-ue.runasp.net/api/Devices/ScanForDevice2?"
-            # f"http://elmagzer.runasp.net/api/Devices/ScanForDevice2?"
             f"weight={weight_to_send}&TypeOfCow={type_value}&TechId=2335C4B&MachId=1&storeId={store_number}&Countid={with_count_id}"
         )
 
@@ -1122,7 +1119,7 @@ def select_store(store_number):
             print(f"API connection error: {e}")
             return None, None
 
-    # Retry logic - keep trying until we get 200 OK (infinite attempts)
+    # Retry logic - keep trying until we get 200 OK
     retry_count = 0
     api_response = None
     response = None
@@ -1131,8 +1128,6 @@ def select_store(store_number):
     loading_popup = ctk.CTkToplevel(app)
     loading_popup.title("Processing...")
     loading_popup.geometry("500x300")
-    # loading_popup.grab_set()  # Prevent interaction with main window
-    # loading_popup.transient(app)  # Make it modal to main window
     
     # Center the popup on screen
     loading_popup.update_idletasks()
@@ -1156,6 +1151,10 @@ def select_store(store_number):
     # Update popup to show it
     loading_popup.update()
     
+    # Initialize variables that will be used in printer functions
+    message_list = []
+    extracted_number = None
+    
     try:
         while True:  # Infinite loop - keep trying until success
             current_count = get_count_id_for_request()
@@ -1164,7 +1163,7 @@ def select_store(store_number):
             print(f"Attempt {retry_count + 1}: Trying API call...")
             
             # Update progress and status
-            progress = min(0.1 + (retry_count * 0.15), 0.9)  # Progress from 10% to 90%
+            progress = min(0.1 + (retry_count * 0.15), 0.9)
             progress_bar.set(progress)
             status_label.configure(text=f"Attempt {retry_count + 1}: Connecting to server...")
             loading_popup.update()
@@ -1174,13 +1173,12 @@ def select_store(store_number):
             if response is None:
                 print(f"Attempt {retry_count + 1} failed: No response")
                 retry_count += 1
-                time.sleep(2)  # Wait 2 seconds before retrying
+                time.sleep(2)
                 continue
                 
             # Check if we got 200 OK
             if "statusCode" in api_response and api_response["statusCode"] == 200:
                 print(f"Success! Got 200 OK on attempt {retry_count + 1}")
-                # Show 100% completion
                 progress_bar.set(1.0)
                 status_label.configure(text="Success! Processing response...")
                 loading_popup.update()
@@ -1190,19 +1188,17 @@ def select_store(store_number):
                 status_label.configure(text="CountID mismatch detected, updating...")
                 loading_popup.update()
                 
-                # If server indicates our countID is ahead/behind, try to sync and retry
                 server_count = extract_count_id_from_response(api_response)
                 if server_count is not None:
                     try:
                         server_count_int = int(server_count)
-                        # Update local countID to match server
                         global count_id_today
                         count_id_today = server_count_int + 1
                         print(f"Updated local countID to: {count_id_today}")
                     except Exception:
                         pass
                 retry_count += 1
-                time.sleep(5)  # Short delay before retry
+                time.sleep(5)
                 continue
             elif api_response.get("statusCode") == 404 and api_response.get("message") == "Resource was not found":
                 status_label.configure(text="Resource not found, stopping...")
@@ -1213,7 +1209,7 @@ def select_store(store_number):
                 status_label.configure(text=f"Attempt {retry_count + 1} failed, retrying...")
                 loading_popup.update()
                 retry_count += 1
-                time.sleep(2)  # Wait 2 seconds before retrying
+                time.sleep(2)
                 if retry_count < 5:
                     continue
                 else:
@@ -1226,17 +1222,13 @@ def select_store(store_number):
         loading_popup.destroy()
 
     except Exception as e:
-        # Handle any unexpected errors
         status_label.configure(text=f"Error: {str(e)}")
         loading_popup.update()
         time.sleep(2)
         loading_popup.destroy()
     finally:
-        # Always close the loading popup
         if loading_popup.winfo_exists():
             loading_popup.destroy()
-
-    # ... existing code continues ...
 
     # Create data that would be sent to API (for display)
     data_to_send = {
@@ -1248,17 +1240,15 @@ def select_store(store_number):
         "attempts": retry_count + 1
     }
 
-    # Print data being sent
     print("Data being sent:")
     print(data_to_send)
 
     # Process API response message
-    extracted_number = None
     if "statusCode" in api_response and api_response["statusCode"] == 200:
         raw_message = api_response.get("message", "")
 
         if raw_message.startswith("OK1 "):
-            raw_message = raw_message[4:]  # remove "OK1 "
+            raw_message = raw_message[4:]
 
         message_list = raw_message.split(",")
         print("Raw split message list:", message_list)
@@ -1267,7 +1257,7 @@ def select_store(store_number):
         if len(message_list) > 0 and message_list[0].startswith("Z"):
             message_list[0] = message_list[0][1:]
 
-        # Remove 'L' from the last element (the date)
+        # Remove 'L' from the last element
         if len(message_list) > 0 and message_list[-1].endswith("L"):
             message_list[-1] = message_list[-1][:-1]
 
@@ -1287,34 +1277,42 @@ def select_store(store_number):
         
         # On success, increment local countID for next request
         try:
-            # global count_id_today
             if count_id_today is None:
                 count_id_today = 0
             count_id_today = int(count_id_today) + 1
             print(f"Local countID incremented to: {count_id_today}")
         except Exception as _:
             pass
-    # elif api_response.get("statusCode") == 400:
-    #     print("CountID is ahead of server")
-    #     count_id_today = int(api_response.get("lastCountId", "")) + 1
-    #     print(f"Local countID incremented to: {count_id_today}")
     elif api_response.get("statusCode") == 400 and api_response.get("message") == "Update Count Id":
         print("CountID is ahead of server")
-        # If server indicates our countID is ahead/behind, try to sync and retry once
         server_count = extract_count_id_from_response(api_response)
         if server_count is not None:
             try:
                 server_count_int = int(server_count)
-                # If our local count is greater than server's, update local to server and retry
-                # global count_id_today
                 if get_count_id_for_request() != server_count_int:
                     count_id_today = server_count_int + 1
                     retry_url = build_api_url(count_id_today)
                     response, api_response = do_request(retry_url)
                     if response is None:
+                        display_error_message("Connection failed", refresh_callback=lambda: select_store(store_number))
                         return
                     if "statusCode" in api_response and api_response["statusCode"] == 200:
                         raw_message = api_response.get("message", "")
+                        # Process the successful response
+                        if raw_message.startswith("OK1 "):
+                            raw_message = raw_message[4:]
+                        message_list = raw_message.split(",")
+                        # Remove 'Z' and 'L' as before
+                        if len(message_list) > 0 and message_list[0].startswith("Z"):
+                            message_list[0] = message_list[0][1:]
+                        if len(message_list) > 0 and message_list[-1].endswith("L"):
+                            message_list[-1] = message_list[-1][:-1]
+                        if len(message_list) > 6:
+                            arabic_text = message_list[6]
+                            match = re.search(r'\d+', arabic_text)
+                            if match:
+                                extracted_number = match.group(0)
+                                message_list[6] = extracted_number
                     else:
                         display_error_message(f"API error: {api_response.get('message', 'Unknown error')}", refresh_callback=lambda: select_store(store_number))
                         return
@@ -1325,15 +1323,13 @@ def select_store(store_number):
                 display_error_message(f"API error: {api_response.get('message', 'Unknown error')}", refresh_callback=lambda: select_store(store_number))
                 return
         else:
-            # Show error page with refresh and back
             display_error_message(f"API error: {api_response.get('message', 'Unknown error')}", refresh_callback=lambda: select_store(store_number))
             return
     else:
         display_error_message(f"API error: {api_response.get('message', 'Unknown error')}", refresh_callback=lambda: select_store(store_number))
+        return
 
-
-    
-
+    # Printer functions (moved outside and properly scoped)
     def crop_white_left(image):
         img_array = np.array(image)
         nonwhite = np.where(img_array == 0)
@@ -1377,7 +1373,6 @@ def select_store(store_number):
             "CLS\r\n"
         )
 
-        # Add any extra text if provided
         if extra_text:
             command_prefix += extra_text
 
@@ -1395,46 +1390,49 @@ def select_store(store_number):
     # Example parts list
     meat_parts = [
         "left shoulder",
-        "left thigh",
+        "left thigh", 
         "right shoulder",
         "right thigh"
     ]
 
-    # Build per selection
     def print_part_by_index(printer, index):
         if index < 1 or index > len(meat_parts):
             print("Out of range!")
             return
         part = meat_parts[index-1]
-        # Add multi-image support here:
         bmp_jobs = [
-            (f"{part}.bmp", (70, 205)),           # Main image
-            # ...add more here if you need for this label
+            (f"{part}.bmp", (70, 205)),
         ]
-        # Any extra text?
-        extra_text = (
-            f'TEXT 0,0,"2",0,1,1,"{message_list[1]}"\r\n'
-            f'TEXT 0,30,"2",0,1,1,"{message_list[2]}"\r\n'
-            f'TEXT 0,60,"2",0,1,1,"order number:{message_list[4]}"\r\n'
-            f'TEXT 0,90,"2",0,1,1,"batch number:{message_list[3]}"\r\n'
-            f'TEXT 0,120,"2",0,1,1,"Date: {message_list[8]}"\r\n'
-            f'TEXT 0,150,"2",0,1,1,"weight:{message_list[7]}"\r\n'
-            f'TEXT 0,180,"2",0,1,1,"type:{selected_type_global}"\r\n'
-            f'TEXT 30,220,"2",0,1,1,"{message_list[6]}"\r\n'
-            f'QRCODE 260,120,L,7,A,0,"{message_list[0]}"\r\n'
-            f'TEXT 280,280,"2",0,1,1,"{message_list[0]}"\r\n'
-             )       
+        
+        # Use the properly scoped variables here - make sure message_list is available
+        if len(message_list) >= 9:  # Ensure we have enough data
+            extra_text = (
+                f'TEXT 0,0,"2",0,1,1,"{message_list[1]}"\r\n'
+                f'TEXT 0,30,"2",0,1,1,"{message_list[2]}"\r\n'
+                f'TEXT 0,60,"2",0,1,1,"order number:{message_list[4]}"\r\n'
+                f'TEXT 0,90,"2",0,1,1,"batch number:{message_list[3]}"\r\n'
+                f'TEXT 0,120,"2",0,1,1,"Date: {message_list[8]}"\r\n'
+                f'TEXT 0,150,"2",0,1,1,"weight:{message_list[7]}"\r\n'
+                f'TEXT 0,180,"2",0,1,1,"type:{selected_type_global}"\r\n'  # Use the global variable
+                f'TEXT 30,220,"2",0,1,1,"{message_list[6]}"\r\n'
+                f'QRCODE 260,120,L,7,A,0,"{message_list[0]}"\r\n'
+                f'TEXT 280,280,"2",0,1,1,"{message_list[0]}"\r\n'
+            )
+        else:
+            # Fallback if message_list is incomplete
+            extra_text = f'TEXT 0,180,"2",0,1,1,"type:{selected_type_global}"\r\n'
        
         send_multi_bmp_to_printer(printer, bmp_jobs, extra_text)
 
-    printer = usb.core.find(idVendor=0x2D37, idProduct=0xDEF4)
-    if printer:
-        index = int(extracted_number)
-        print_part_by_index(printer, index)
-        printer.reset()  # Attempt a soft reset to clear any potential issues
-
-    else:
-        print("Printer not found.")
+    # Only print if we have valid data and extracted number
+    if extracted_number and message_list:
+        printer = usb.core.find(idVendor=0x2D37, idProduct=0xDEF4)
+        if printer:
+            index = int(extracted_number)
+            print_part_by_index(printer, index)
+            printer.reset()
+        else:
+            print("Printer not found.")
 
     # Display confirmation message
     for widget in app.winfo_children():
@@ -1450,11 +1448,11 @@ def select_store(store_number):
         logo_label = ctk.CTkLabel(frame, image=resized_image, text="")
         logo_label.grid(row=0, column=1, padx=20)
 
-    # Add confirmation text with both type and store
-    text_label = ctk.CTkLabel(frame, text=f"Type: {selected_type} (Value: {type_value})\nSelected Store: {store_number}", font=("Arial", 40))
+    # Add confirmation text with both type and store - use the updated global variable
+    text_label = ctk.CTkLabel(frame, text=f"Type: {selected_type_global} (Value: {type_value})\nSelected Store: {store_number}", font=("Arial", 40))
     text_label.grid(row=0, column=0, padx=30)
     
-    if response.status_code == 200:
+    if response and response.status_code == 200:
         response_text = "Data sent to API!"
         response_color = custom_color
     else:
@@ -1487,19 +1485,20 @@ def select_store(store_number):
         justify="left"
     ).pack(anchor="w", padx=20)
     
-    ctk.CTkLabel(
-        data_frame,
-        text="API Response:",
-        font=("Arial", 20, "bold"),
-    ).pack(anchor="w", padx=20, pady=(10, 0))
-    
-    response_text = "\n".join([f"{k}: {v}" for k, v in api_response.items()])
-    ctk.CTkLabel(
-        data_frame,
-        text=response_text,
-        font=("Arial", 20),
-        justify="left"
-    ).pack(anchor="w", padx=20)
+    if api_response:
+        ctk.CTkLabel(
+            data_frame,
+            text="API Response:",
+            font=("Arial", 20, "bold"),
+        ).pack(anchor="w", padx=20, pady=(10, 0))
+        
+        response_text = "\n".join([f"{k}: {v}" for k, v in api_response.items()])
+        ctk.CTkLabel(
+            data_frame,
+            text=response_text,
+            font=("Arial", 20),
+            justify="left"
+        ).pack(anchor="w", padx=20)
     
     # Button to return to store selection
     ctk.CTkButton(
@@ -1513,10 +1512,23 @@ def select_store(store_number):
         fg_color=button_color
     ).pack(pady=25)
     
+    # Updated reprint function to use current scope variables
+    def reprint_current():
+        if extracted_number and message_list:
+            printer = usb.core.find(idVendor=0x2D37, idProduct=0xDEF4)
+            if printer:
+                index = int(extracted_number)
+                print_part_by_index(printer, index)
+                printer.reset()
+            else:
+                print("Printer not found.")
+        else:
+            print("No valid data to reprint")
+    
     ctk.CTkButton(
         app,
         text="Reprint",
-        command= reprint,
+        command=reprint_current,  # Use the local function
         font=("Arial", 45, "bold"),
         text_color="black",
         width=500,
